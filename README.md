@@ -555,14 +555,17 @@ If you have trouble installing the dependencies, just create a new GitHub Codesp
 
 #### Custom Nerd-Font
 
-If you just want to get fixed width icons, setup `"nerd_font.mono": true` in `config.json` or add `--nf-mono` flag to build script args.
+If you want to get fixed width icons, setup `"nerd_font.mono": true` in `config.json` or add `--nf-mono` flag to build script args.
+
+If you want to get variable width icons, setup `"nerd_font.propo": true` in `config.json` or add `--nf-propo` flag to build script args.
 
 For custom `font-patcher` args, `font-forge` (and maybe `python3-fontforge` as well) is required.
 
 Maybe you should also change `"nerd_font.extra_args"` in [config.json](./config.json)
 
 Default args: `-l --careful --outputdir dir`
-- if `"nerd_font.mono"` is `true`, then add `--mono`
+- if `"nerd_font.propo"` is `true`, then add `--variable-width-glyphs`
+- else if `"nerd_font.mono"` is `true`, then add `--mono`
 
 #### Preset
 
@@ -595,11 +598,15 @@ By default, the Python module in [`source/py/feature/`](./source/py/feature) wil
 
 If you would like to modify the feature file instead, run `build.py` with `--apply-fea-file` flag, the feature file from [`source/features/{regular,italic}.fea`](./source/features) will be loaded.
 
+#### Infinite Arrow Ligatures
+
+Inspired by Fira Code, the font enables infinite arrow ligatures by default from v7.3. For some reason, the ligatures are misaligned when using hinted font, so they are removed in hinted version by default from v7.4. You can setup `"keep_infinite_arrow": true` in `config.json` or add `--keep-infinite-arrow` in cli flag. See more details in [#508](https://github.com/subframe7536/maple-font/issues/508)
+
 ### Chinese version
 
-CN version is disabled by default. Run `python build.py` with `--cn` flag, the CN base fonts (about 130 MB) will download from GitHub.
+CN version is disabled by default. Run `python build.py` with `--cn` flag, the CN base fonts (about 111 MB) will download from GitHub.
 
-If you want to build CN base fonts from variable (about 35 MB), setup `"cn.use_static_base_font": false` in [config.json](./config.json) and **BE PATIENT**, instantiation will take about 20-30 minutes.
+If you want to build CN base fonts from variable (about 27 MB), setup `"cn.use_static_base_font": false` in [config.json](./config.json) and **BE PATIENT**, instantiation will take about 10-30 minutes.
 
 #### Narrow spacing in CN glyphs
 
@@ -619,11 +626,12 @@ By enabling `cv99`, all Chinese punctuation marks will be centred. See more deta
 
 ```
 usage: build.py [-h] [-v] [-d] [--debug] [-n] [--feat FEAT] [--apply-fea-file]
-                [--hinted | --no-hinted] [--liga | --no-liga] [--nf-mono]
-                [--cn-narrow] [--cn-scale-factor CN_SCALE_FACTOR] [--nerd-font |
-                --no-nerd-font] [--cn | --no-cn] [--cn-both] [--ttf-only]
-                [--least-styles] [--font-patcher] [--cache] [--cn-rebuild]
-                [--archive]
+                [--hinted | --no-hinted] [--liga | --no-liga] [--keep-infinite-arrow]
+                [--infinite-arrow] [--remove-tag-liga] [--line-height LINE_HEIGHT]
+                [--nf-mono] [--nf-propo] [--cn-narrow]
+                [--cn-scale-factor CN_SCALE_FACTOR] [--nf | --no-nf] [--cn | --no-cn]
+                [--cn-both] [--ttf-only] [--least-styles] [--font-patcher] [--cache]
+                [--cn-rebuild] [--archive]
 
 ✨ Builder and optimizer for Maple Mono
 
@@ -644,7 +652,16 @@ Feature Options:
   --no-hinted           Use unhinted font as base font in NF / CN / NF-CN
   --liga                Preserve all the ligatures (default)
   --no-liga             Remove all the ligatures
-  --nf-mono             Fixed Nerd Font icons' width
+  --keep-infinite-arrow
+                        (Deprecated) Keep infinite arrow ligatures in hinted font
+                        (Removed by default)
+  --infinite-arrow      Enable infinite arrow ligatures (Disabled in hinted font by
+                        default)
+  --remove-tag-liga     Remove plain text tag ligatures like `[TODO]`
+  --line-height LINE_HEIGHT
+                        Scale factor for line height (e.g. 1.1)
+  --nf-mono             Make Nerd Font icons' width fixed
+  --nf-propo            Make Nerd Font icons' width variable, override `--nf-mono`
   --cn-narrow           Make CN / JP characters narrow (And the font cannot be
                         recogized as monospaced font)
   --cn-scale-factor CN_SCALE_FACTOR
@@ -652,8 +669,9 @@ Feature Options:
                         <width_factor>,<height_factor> (e.g. 1.1 or 1.2,1.1)
 
 Build Options:
-  --nerd-font           Build Nerd-Font version (default)
-  --no-nerd-font        Do not build Nerd-Font version
+  --nf, --nerd-font     Build Nerd-Font version (default)
+  --no-nf, --no-nerd-font
+                        Do not build Nerd-Font version
   --cn                  Build Chinese version
   --no-cn               Do not build Chinese version (default)
   --cn-both             Build both `Maple Mono CN` and `Maple Mono NF CN`. Nerd-Font

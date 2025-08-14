@@ -7,27 +7,10 @@ from urllib.request import Request, urlopen
 from zipfile import ZIP_DEFLATED, ZipFile
 from fontTools.ttLib import TTFont
 from fontTools.merge import Merger
-from glyphsLib import GSFont
+from source.py.task._utils import is_ci
 
 
-def is_ci():
-    ci_envs = [
-        "JENKINS_HOME",
-        "TRAVIS",
-        "CIRCLECI",
-        "GITHUB_ACTIONS",
-        "GITLAB_CI",
-        "TF_BUILD",
-    ]
-
-    for env in ci_envs:
-        if environ.get(env):
-            return True
-
-    return False
-
-
-def run(command, extra_args=None, log=not is_ci()):
+def run(command: str | list[str], extra_args: list[str] | None = None, log=not is_ci()):
     """
     Run a command line interface (CLI) command.
     """
@@ -38,13 +21,15 @@ def run(command, extra_args=None, log=not is_ci()):
     subprocess.run(
         command + extra_args,
         stdout=subprocess.DEVNULL if not log else None,
+        stderr=subprocess.DEVNULL if not log else None,
         check=True,
     )
 
 
-def set_font_name(font: TTFont, name: str, id: int):
-    font["name"].setName(name, nameID=id, platformID=1, platEncID=0, langID=0x0)  # type: ignore
+def set_font_name(font: TTFont, name: str, id: int, mac: bool | None = None):
     font["name"].setName(name, nameID=id, platformID=3, platEncID=1, langID=0x409)  # type: ignore
+    if mac:
+        font["name"].setName(name, nameID=id, platformID=1, platEncID=0, langID=0x0)  # type: ignore
 
 
 def get_font_name(font: TTFont, id: int) -> str:
@@ -187,6 +172,12 @@ def download_cn_base_font(
 
 
 def match_unicode_names(file_path: str) -> dict[str, str]:
+    try:
+        from glyphsLib import GSFont
+    except ImportError:
+        print("❗ glyphsLib is not found. Please run `pip install glyphsLib`")
+        exit(1)
+
     font = GSFont(file_path)
     result = {}
 
@@ -205,24 +196,26 @@ def match_unicode_names(file_path: str) -> dict[str, str]:
 def verify_glyph_width(
     font: TTFont, expect_widths: list[int], file_name: str | None = None
 ):
-    print("Verify glyph width")
     result = []
     for name in font.getGlyphNames():
         width, _ = font["hmtx"][name]  # type: ignore
         if width not in expect_widths:
             result.append([name, width])
 
-    if result.__len__() > 0:
-        print(f"Every glyph's width should be in {expect_widths}, but these are not:")
-        for item in result:
-            print(f"{item[0]}  =>  {item[1]}")
+    if result.__len__() == 0:
+        print(f"✅ Verified glyph width in {file_name}")
+        return
 
-        raise Exception(
-            f"{file_name or 'The font'} may contain glyphs that width is not in {expect_widths}, which may broke monospace rule."
-        )
+    print(f"Every glyph's width should be in {expect_widths}, but these are not:")
+    for item in result:
+        print(f"{item[0]}  =>  {item[1]}")
+
+    raise Exception(
+        f"{file_name or 'The font'} may contain glyphs that width is not in {expect_widths}, which may broke monospace rule."
+    )
 
 
-def compress_folder(
+def archive_fonts(
     source_file_or_dir_path: str,
     target_parent_dir_path: str,
     family_name_compact: str,
@@ -377,3 +370,61 @@ def merge_ttfonts(
     except Exception as e:
         print(f"Error merging fonts: {str(e)}")
         raise
+
+
+def add_ital_axis_to_stat(font: TTFont):
+    """
+    Add fake ``ital`` axis to append "italic" to subfamily name in italic variable font
+    """
+    from fontTools.ttLib.tables import otTables as ot
+
+    name = font["name"]
+    stat_table = font["STAT"].table  # type: ignore
+
+    # Add fake axis name
+    id = name._findUnusedNameID()  # type: ignore
+    set_font_name(font, "Italic", id, True)
+
+    # Add AxisRecord
+    axis = ot.AxisRecord()  # type: ignore
+    axis.AxisTag = "ital"
+    axis.AxisOrdering = len(stat_table.DesignAxisRecord.Axis)
+    axis.AxisNameID = id
+    stat_table.DesignAxisRecord.Axis.append(axis)
+    stat_table.DesignAxisCount += 1
+
+    # Add AxisValue
+    axisValRec = ot.AxisValue()  # type: ignore
+    axisValRec.AxisIndex = axis.AxisOrdering
+    axisValRec.Flags = 0
+    axisValRec.Format = 1
+    axisValRec.ValueNameID = id
+    axisValRec.Value = 1.0
+    stat_table.AxisValueArray.AxisValue.append(axisValRec)
+    stat_table.AxisValueCount += 1
+
+
+def adjust_line_height(font: TTFont, factor: float) -> None:
+    """
+    Adjust the line height of the font by modifying the hhea and OS/2 table.
+
+    Offset is ``int(550 * (factor - 1))``
+    """
+    if factor == 1.0:
+        return
+
+    if "hhea" not in font:
+        raise ValueError("No hhea table found.")
+    if "OS/2" not in font:
+        raise ValueError("No OS/2 table found.")
+
+    hhea = font["hhea"]
+    os2 = font["OS/2"]
+    offset = int(550 * (factor - 1))  # type: ignore
+    hhea.ascender += offset  # type: ignore
+    hhea.descender -= offset  # type: ignore
+    os2.sTypoAscender += offset  # type: ignore
+    os2.sTypoDescender -= offset  # type: ignore
+    os2.usWinAscent += offset  # type: ignore
+    # this is correct since this value is positive
+    os2.usWinDescent += offset  # type: ignore
